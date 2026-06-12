@@ -13,6 +13,7 @@ import {
   type CrewCall,
 } from "@/lib/crew-api";
 import { ArrowLeft, Home, MapPin, Navigation, Truck, Warehouse } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -22,6 +23,11 @@ type LocationPayload = {
   heading?: number;
   speed?: number;
 };
+
+const LeafletTrackingMap = dynamic(
+  () => import("@/components/maps/LeafletTrackingMap").then((module) => module.LeafletTrackingMap),
+  { ssr: false },
+);
 
 type Coordinates = {
   lat: number;
@@ -44,33 +50,6 @@ function formatDateTime(value?: string | null) {
 function formatCoordinates(location?: Coordinates | null) {
   if (!location) return "-";
   return `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`;
-}
-
-function buildGoogleMapEmbedUrl({
-  center,
-  routeFrom,
-  routeTo,
-}: {
-  center: Coordinates;
-  routeFrom?: Coordinates | null;
-  routeTo?: Coordinates | null;
-}) {
-  const params = new URLSearchParams();
-
-  if (routeFrom && routeTo) {
-    params.set("f", "d");
-    params.set("source", "s_d");
-    params.set("saddr", `${routeFrom.lat},${routeFrom.lng}`);
-    params.set("daddr", `${routeTo.lat},${routeTo.lng}`);
-    params.set("z", "15");
-  } else {
-    params.set("q", `${center.lat},${center.lng}`);
-    params.set("z", "16");
-  }
-
-  params.set("hl", "ko");
-  params.set("output", "embed");
-  return `https://maps.google.com/maps?${params.toString()}`;
 }
 
 export default function CrewActiveCallPage() {
@@ -266,11 +245,12 @@ export default function CrewActiveCallPage() {
     : null;
   const routeTarget = status === "ARRIVED" || status === "COMPLETED" ? hubLocation ?? pickupLocation : pickupLocation;
   const mapCenter = routeTarget ?? crewLocation ?? { lat: 37.5665, lng: 126.978 };
-  const mapUrl = buildGoogleMapEmbedUrl({
-    center: mapCenter,
-    routeFrom: crewLocation,
-    routeTo: routeTarget,
-  });
+  const mapMarkers = [
+    ...(pickupLocation ? [{ key: "pickup", label: "P", position: pickupLocation, variant: "pickup" as const }] : []),
+    ...(crewLocation ? [{ key: "crew", label: "C", position: crewLocation, variant: "crew" as const }] : []),
+    ...(hubLocation ? [{ key: "hub", label: "H", position: hubLocation, variant: "hub" as const }] : []),
+  ];
+  const mapPath = crewLocation && routeTarget ? [crewLocation, routeTarget] : [];
 
   return (
     <CrewPhoneShell>
@@ -302,12 +282,11 @@ export default function CrewActiveCallPage() {
         </section>
 
         <section className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-white">
-          <iframe
-            className="h-[260px] w-full border-0"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            src={mapUrl}
-            title="crew-live-map"
+          <LeafletTrackingMap
+            center={mapCenter}
+            className="h-[260px] w-full"
+            markers={mapMarkers}
+            path={mapPath}
           />
           <div className="grid grid-cols-1 gap-2 border-t border-slate-200 bg-white p-4">
             <InfoTile label="크루 현재 좌표" value={formatCoordinates(crewLocation)} />
