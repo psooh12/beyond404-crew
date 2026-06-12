@@ -16,16 +16,19 @@ import {
 export default function CrewCallsPage() {
   const [calls, setCalls] = useState<CrewCall[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("수거 요청 목록을 확인하는 중입니다.");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
 
   const loadCalls = async () => {
     setLoading(true);
+    setErrorMessage(null);
+
     try {
       const data = await fetchCrewCalls();
       setCalls(data);
-      setMessage(data.length > 0 ? "수거 요청 목록이 업데이트되었습니다." : "현재 새로운 수거 요청이 없습니다.");
+      setLastLoadedAt(formatLoadedTime(new Date()));
     } catch {
-      setMessage("수거 요청 목록을 불러오지 못했습니다. 백엔드 연결 상태를 확인해 주세요.");
+      setErrorMessage("수거 요청 목록을 불러오지 못했습니다. 백엔드 연결 상태를 확인해 주세요.");
     } finally {
       setLoading(false);
     }
@@ -64,7 +67,7 @@ export default function CrewCallsPage() {
         <section className="mt-4 rounded-[18px] bg-lgred p-4 text-white">
           <div className="grid grid-cols-3 gap-2 text-center">
             <MiniStat label="대기 콜" value={String(calls.length)} />
-            <MiniStat label="알림" value={calls.length > 0 ? "도착" : "없음"} />
+            <MiniStat label="연결" value={errorMessage ? "확인 필요" : "정상"} />
             <MiniStat label="상태" value={loading ? "갱신 중" : "준비"} />
           </div>
         </section>
@@ -96,13 +99,15 @@ export default function CrewCallsPage() {
                       </span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <InfoTile label="요청 시간" value={formatRequestTime(call.pickupRequest?.requestedAt, call.pickupRequest?.scheduledAt)} />
+                      <InfoTile
+                        label="요청 시간"
+                        value={formatRequestTime(call.pickupRequest?.requestedAt, call.pickupRequest?.scheduledAt)}
+                      />
                       <InfoTile label="예약 방식" value={pickupTypeLabel(call.pickupRequest?.pickupType)} />
                     </div>
                     <div className="mt-3 flex items-center justify-between text-sm font-black text-lgred">
                       <span className="inline-flex items-center gap-2">
-                        <Bell size={15} />
-                        콜 상세 보기
+                        <Bell size={15} />콜 상세 보기
                       </span>
                       <ChevronRight size={16} />
                     </div>
@@ -117,8 +122,14 @@ export default function CrewCallsPage() {
           </div>
         </section>
 
-        <div className="mt-4 rounded-[14px] bg-slate-50 px-4 py-3 text-sm font-bold leading-6 text-slate-600">
-          {loading ? "콜 목록 갱신 중..." : message}
+        <div
+          className={`mt-4 rounded-[14px] px-4 py-3 text-sm font-bold leading-6 ${
+            errorMessage ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"
+          }`}
+        >
+          {loading
+            ? "콜 목록을 새로 확인하고 있습니다..."
+            : errorMessage ?? `백엔드 연결 정상${lastLoadedAt ? ` · 마지막 확인 ${lastLoadedAt}` : ""}`}
         </div>
       </div>
     </CrewPhoneShell>
@@ -141,4 +152,13 @@ function InfoTile({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-black text-ink">{value}</p>
     </div>
   );
+}
+
+function formatLoadedTime(date: Date) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
 }
