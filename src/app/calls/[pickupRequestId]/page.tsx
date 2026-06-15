@@ -11,7 +11,7 @@ import {
   statusLabel,
   type CrewCall,
 } from "@/lib/crew-api";
-import { ArrowLeft, Check, MapPin, PackageCheck, ShieldCheck, Truck, Users, Warehouse } from "lucide-react";
+import { ArrowLeft, Check, Home, MapPin, PackageCheck, ShieldCheck, Truck, Users, Warehouse } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -81,17 +81,21 @@ export default function CrewCallDetailPage() {
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="text-right">
-              <p className="text-sm font-black text-lgred">CALL DETAIL</p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">{statusLabel(status)}</p>
-            </div>
+            <button
+              className="flex h-10 items-center gap-2 rounded-full bg-slate-100 px-4 text-sm font-black text-slate-700"
+              onClick={() => router.push("/")}
+              type="button"
+            >
+              <Home size={14} />
+              홈
+            </button>
           </header>
 
           <section className="mt-4 rounded-[18px] bg-lgred p-4 text-white">
             <p className="text-xs font-black text-white/70">선택한 수거 요청</p>
             <h1 className="mt-2 text-2xl font-black">{call ? applianceName(call) : "수거 요청"}</h1>
             <p className="mt-2 text-sm font-semibold text-white/85">
-              요청 위치와 시간, 배차 정보를 확인한 뒤 콜 수락 또는 진행 처리 화면으로 이동할 수 있습니다.
+              요청 위치와 시간, 배차 정보를 확인한 뒤 콜을 수락하거나 진행 화면으로 이동할 수 있어요.
             </p>
           </section>
 
@@ -139,7 +143,7 @@ export default function CrewCallDetailPage() {
               />
               <InfoTileBlock
                 label="수거지까지"
-                value={formatDistance(call?.tracking?.metrics?.crewToPickupMeters)}
+                value={call?.tracking?.route?.distanceLabel ?? formatDistance(call?.tracking?.metrics?.crewToPickupMeters)}
               />
             </div>
           </section>
@@ -164,7 +168,7 @@ export default function CrewCallDetailPage() {
               href={`/calls/${pickupRequestId}/active`}
             >
               {status === "COMPLETED" ? <Warehouse size={16} /> : <Truck size={16} />}
-              {status === "COMPLETED" ? "처리 완료 화면" : "진행 중인 콜"}
+              {status === "COMPLETED" ? "처리 완료 화면" : "진행 중인 콜 보기"}
             </Link>
           ) : null}
 

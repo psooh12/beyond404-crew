@@ -87,6 +87,26 @@ export type CrewCall = {
       speed: number;
       updatedAt?: string | null;
     } | null;
+    route?: {
+      mode: string;
+      distanceMeters: number | null;
+      durationSeconds: number | null;
+      distanceLabel: string | null;
+      durationLabel: string | null;
+      encodedPolyline?: string | null;
+      points: {
+        lat: number;
+        lng: number;
+      }[];
+      calculatedAt?: string | null;
+    } | null;
+    locationHistory?: {
+      lat: number;
+      lng: number;
+      heading: number;
+      speed: number;
+      recordedAt: string;
+    }[];
   } | null;
   settlement?: {
     baseFee: number | null;
@@ -139,8 +159,28 @@ export function fetchCrewCalls() {
   return crewRequest<CrewCall[]>("/api/crew/calls");
 }
 
+export function fetchPendingCrewCalls() {
+  return crewRequest<CrewCall[]>("/api/crew/calls/pending");
+}
+
+export function fetchActiveCrewCalls() {
+  return crewRequest<CrewCall[]>("/api/crew/calls/active");
+}
+
 export function fetchCrewCallDetail(pickupRequestId: number) {
   return crewRequest<CrewCall>(`/api/crew/calls/${pickupRequestId}`);
+}
+
+export function fetchCrewLocationHistory(pickupRequestId: number) {
+  return crewRequest<
+    {
+      lat: number;
+      lng: number;
+      heading: number;
+      speed: number;
+      recordedAt: string;
+    }[]
+  >(`/api/crew/pickups/${pickupRequestId}/location-history`);
 }
 
 export function acceptCrewCall(pickupRequestId: number) {
