@@ -1,22 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, ChevronRight, RefreshCw, Truck, Users } from "lucide-react";
 import { CrewPhoneShell } from "@/components/CrewPhoneShell";
 import {
   applianceName,
-  fetchCrewCalls,
+  fetchActiveCrewCalls,
+  fetchPendingCrewCalls,
   formatRequestTime,
   pickupTypeLabel,
   statusLabel,
   type CrewCall,
 } from "@/lib/crew-api";
 
-const ongoingStatuses = new Set(["ASSIGNED", "IN_PROGRESS", "ARRIVED"]);
-
 export default function CrewCallsPage() {
-  const [calls, setCalls] = useState<CrewCall[]>([]);
+  const [pendingCalls, setPendingCalls] = useState<CrewCall[]>([]);
+  const [activeCalls, setActiveCalls] = useState<CrewCall[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
@@ -26,8 +26,9 @@ export default function CrewCallsPage() {
     setErrorMessage(null);
 
     try {
-      const data = await fetchCrewCalls();
-      setCalls(data);
+      const [pending, active] = await Promise.all([fetchPendingCrewCalls(), fetchActiveCrewCalls()]);
+      setPendingCalls(pending);
+      setActiveCalls(active);
       setLastLoadedAt(formatLoadedTime(new Date()));
     } catch {
       setErrorMessage("수거 요청 목록을 불러오지 못했습니다. 백엔드 연결 상태를 확인해 주세요.");
@@ -44,12 +45,6 @@ export default function CrewCallsPage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const { pendingCalls, activeCalls } = useMemo(() => {
-    const pending = calls.filter((call) => !ongoingStatuses.has(call.pickupRequest?.status ?? "") && call.pickupRequest?.status !== "COMPLETED");
-    const active = calls.filter((call) => ongoingStatuses.has(call.pickupRequest?.status ?? ""));
-    return { pendingCalls: pending, activeCalls: active };
-  }, [calls]);
-
   return (
     <CrewPhoneShell>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 pb-5">
@@ -58,7 +53,7 @@ export default function CrewCallsPage() {
             <p className="text-sm font-black text-lgred">PICKUP CREW</p>
             <h1 className="mt-1 text-3xl font-black text-black">수거 요청 목록</h1>
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              새 요청을 확인하고, 수락 후에는 진행 중인 수거에서 바로 이동 상황을 관리할 수 있습니다.
+              새 요청은 수거 요청에서 확인하고, 수락한 건은 진행 중인 수거에서 이어서 처리할 수 있어요.
             </p>
           </div>
           <button
@@ -74,7 +69,7 @@ export default function CrewCallsPage() {
 
         <section className="mt-4 rounded-[18px] bg-lgred p-4 text-white">
           <div className="grid grid-cols-3 gap-2 text-center">
-            <MiniStat label="수거 요청" value={String(pendingCalls.length)} />
+            <MiniStat label="대기 콜" value={String(pendingCalls.length)} />
             <MiniStat label="진행 중" value={String(activeCalls.length)} />
             <MiniStat label="상태" value={loading ? "갱신 중" : "준비"} />
           </div>

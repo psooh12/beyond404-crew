@@ -2,8 +2,8 @@
 
 import { CrewPhoneShell } from "@/components/CrewPhoneShell";
 import {
-  arriveCrewCall,
   applianceName,
+  arriveCrewCall,
   completeCrewCall,
   departCrewCall,
   fetchCrewCallDetail,
@@ -15,7 +15,12 @@ import {
 import { ArrowLeft, Home, MapPin, Navigation, Truck, Warehouse } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+
+type Coordinates = {
+  lat: number;
+  lng: number;
+};
 
 type LocationPayload = {
   lat: number;
@@ -29,10 +34,12 @@ const LeafletTrackingMap = dynamic(
   { ssr: false },
 );
 
-type Coordinates = {
-  lat: number;
-  lng: number;
-};
+const GoogleCanvasMap = dynamic(
+  () => import("@/components/maps/GoogleCanvasMap").then((module) => module.GoogleCanvasMap),
+  { ssr: false },
+);
+
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ?? "";
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
@@ -51,22 +58,23 @@ export default function CrewActiveCallPage() {
   const router = useRouter();
   const params = useParams<{ pickupRequestId: string }>();
   const pickupRequestId = Number(params.pickupRequestId);
+
   const [call, setCall] = useState<CrewCall | null>(null);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("진행 중인 콜 정보를 불러오는 중입니다.");
+  const [message, setMessage] = useState("진행 중인 수거 정보를 불러오는 중입니다.");
   const [pickupPhotoFileName, setPickupPhotoFileName] = useState("crew-pickup-proof-demo.jpg");
   const [hubPhotoFileName, setHubPhotoFileName] = useState("crew-hub-proof-demo.jpg");
   const [inspectionMemo, setInspectionMemo] = useState("문앞 도착 후 상태 확인 및 수거 완료");
-  const [hubMemo, setHubMemo] = useState("e-waste 공장 도착 후 전달 완료 등록");
+  const [hubMemo, setHubMemo] = useState("e-waste 공장 전달 및 처리 완료 등록");
 
   const loadCall = async () => {
     setLoading(true);
     try {
       const data = await fetchCrewCallDetail(pickupRequestId);
       setCall(data);
-      setMessage("진행 중인 콜 정보를 업데이트했습니다.");
+      setMessage("진행 중인 수거 정보를 업데이트했습니다.");
     } catch {
-      setMessage("진행 중인 콜 정보를 불러오지 못했습니다.");
+      setMessage("진행 중인 수거 정보를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -81,15 +89,15 @@ export default function CrewActiveCallPage() {
   }, [pickupRequestId]);
 
   const status = call?.pickupRequest?.status ?? "";
-  const locationTrackingEnabled = useMemo(() => ["ASSIGNED", "IN_PROGRESS", "ARRIVED"].includes(status), [status]);
+  const locationTrackingEnabled = ["ASSIGNED", "IN_PROGRESS", "ARRIVED"].includes(status);
 
   useEffect(() => {
     if (!locationTrackingEnabled) {
       return undefined;
     }
 
-    let fallbackCleanup: (() => void) | undefined;
     let stopped = false;
+    let fallbackCleanup: (() => void) | undefined;
     let lastSentAt = 0;
 
     const sendLocation = async (payload: LocationPayload) => {
@@ -97,7 +105,7 @@ export default function CrewActiveCallPage() {
         const updated = await updateCrewLocation(pickupRequestId, payload);
         if (!stopped) {
           setCall(updated);
-          setMessage("크루 위치를 사용자 앱에 실시간으로 공유 중입니다.");
+          setMessage("크루 위치를 실시간으로 사용자 앱에 공유하고 있습니다.");
         }
       } catch {
         if (!stopped) {
@@ -106,24 +114,19 @@ export default function CrewActiveCallPage() {
       }
     };
 
-    const buildFallbackStep = () => {
+    const startFallbackSimulation = () => {
       const pickupLat = call?.booking?.pickupLat ?? 37.5665;
       const pickupLng = call?.booking?.pickupLng ?? 126.978;
-      const processingCenterLat = call?.tracking?.processingCenter?.lat ?? pickupLat + 0.014;
-      const processingCenterLng = call?.tracking?.processingCenter?.lng ?? pickupLng - 0.012;
+      const hubLat = call?.tracking?.processingCenter?.lat ?? pickupLat + 0.014;
+      const hubLng = call?.tracking?.processingCenter?.lng ?? pickupLng - 0.012;
       const headingToHub = status === "ARRIVED";
-      const targetLat = headingToHub ? processingCenterLat : pickupLat;
-      const targetLng = headingToHub ? processingCenterLng : pickupLng;
+      const targetLat = headingToHub ? hubLat : pickupLat;
+      const targetLng = headingToHub ? hubLng : pickupLng;
       const startLat = call?.tracking?.driverLocation?.lat ?? targetLat - 0.01;
       const startLng = call?.tracking?.driverLocation?.lng ?? targetLng + 0.01;
-      return { headingToHub, startLat, startLng, targetLat, targetLng };
-    };
-
-    const startFallbackSimulation = () => {
-      const { headingToHub, startLat, startLng, targetLat, targetLng } = buildFallbackStep();
       let step = 0;
 
-      const sendStep = async () => {
+      const tick = async () => {
         step += 1;
         const ratio = Math.min(step / 10, 1);
         const lat = startLat + (targetLat - startLat) * ratio;
@@ -136,9 +139,9 @@ export default function CrewActiveCallPage() {
         });
       };
 
-      void sendStep();
+      void tick();
       const timer = window.setInterval(() => {
-        void sendStep();
+        void tick();
       }, 3000);
 
       return () => window.clearInterval(timer);
@@ -180,7 +183,7 @@ export default function CrewActiveCallPage() {
       };
     }
 
-    setMessage("이 기기에서 GPS를 사용할 수 없어 시뮬레이션 위치를 전송합니다.");
+    setMessage("이 기기에서는 GPS 사용이 어려워 시뮬레이션 위치를 전송합니다.");
     fallbackCleanup = startFallbackSimulation();
 
     return () => {
@@ -213,8 +216,10 @@ export default function CrewActiveCallPage() {
                 inspectionMemo,
                 hubMemo,
               });
+
       setCall(updated);
       setMessage(actionMessage(action));
+
       if (action === "complete") {
         router.push("/");
       }
@@ -226,10 +231,7 @@ export default function CrewActiveCallPage() {
   };
 
   const crewLocation = call?.tracking?.driverLocation
-    ? {
-        lat: call.tracking.driverLocation.lat,
-        lng: call.tracking.driverLocation.lng,
-      }
+    ? { lat: call.tracking.driverLocation.lat, lng: call.tracking.driverLocation.lng }
     : null;
   const pickupLocation =
     call?.booking?.pickupLat != null && call?.booking?.pickupLng != null
@@ -238,8 +240,8 @@ export default function CrewActiveCallPage() {
   const hubLocation = call?.tracking?.processingCenter
     ? { lat: call.tracking.processingCenter.lat, lng: call.tracking.processingCenter.lng }
     : null;
-  const routeTarget = status === "ARRIVED" || status === "COMPLETED" ? hubLocation ?? pickupLocation : pickupLocation;
-  const mapCenter = routeTarget ?? crewLocation ?? { lat: 37.5665, lng: 126.978 };
+
+  const mapCenter = crewLocation ?? pickupLocation ?? hubLocation ?? { lat: 37.5665, lng: 126.978 };
   const mapMarkers = [
     ...(pickupLocation ? [{ key: "pickup", label: "P", position: pickupLocation, variant: "pickup" as const }] : []),
     ...(crewLocation ? [{ key: "crew", label: "C", position: crewLocation, variant: "crew" as const }] : []),
@@ -274,20 +276,30 @@ export default function CrewActiveCallPage() {
         </header>
 
         <section className="mt-4 rounded-[18px] bg-lgred p-4 text-white">
-          <p className="text-xs font-black text-white/70">진행 중인 콜</p>
+          <p className="text-xs font-black text-white/70">진행 중인 수거</p>
           <h1 className="mt-2 text-2xl font-black">{call ? applianceName(call) : "수거 요청"}</h1>
-          <p className="mt-2 text-sm font-semibold text-white/85">
-            {call?.pickupRequest?.address ?? "수거 주소 정보 없음"}
-          </p>
+          <p className="mt-2 text-sm font-semibold text-white/85">{call?.pickupRequest?.address ?? "수거 주소 정보 없음"}</p>
         </section>
 
         <section className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-white">
-          <LeafletTrackingMap
-            center={mapCenter}
-            className="h-[260px] w-full"
-            markers={mapMarkers}
-            path={mapPath}
-          />
+          {googleMapsApiKey ? (
+            <GoogleCanvasMap
+              apiKey={googleMapsApiKey}
+              center={mapCenter}
+              className="h-[260px] w-full"
+              fitBounds
+              markers={mapMarkers.map((marker) => ({
+                key: marker.key,
+                label: marker.label,
+                position: marker.position,
+                title: marker.key,
+              }))}
+              path={mapPath}
+              zoom={16}
+            />
+          ) : (
+            <LeafletTrackingMap center={mapCenter} className="h-[260px] w-full" markers={mapMarkers} path={mapPath} />
+          )}
           <div className="grid grid-cols-1 gap-2 border-t border-slate-200 bg-white p-4">
             <InfoTile label="크루 현재 위치" value={`${crewAddress} · 수거지까지 ${crewToPickupDistance}`} />
             <InfoTile label="수거 위치" value={pickupAddress} />
@@ -305,13 +317,13 @@ export default function CrewActiveCallPage() {
         <section className="mt-4 rounded-[18px] border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 text-sm font-black text-black">
             <Navigation size={16} />
-            위치 기준 정보
+            진행 안내
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2">
             <InfoTile label="수거 위치" value={call?.pickupRequest?.address ?? "-"} />
             <InfoTile label="처리 허브" value={call?.tracking?.processingCenter?.label ?? "-"} />
             <InfoTile
-              label="크루 이동 상태"
+              label="실시간 위치 상태"
               value={call?.tracking?.metrics?.locationLive ? "실시간 GPS 반영 중" : "위치 확인 중"}
             />
           </div>
@@ -347,7 +359,7 @@ export default function CrewActiveCallPage() {
                 {status === "ARRIVED"
                   ? "문앞 도착 단계 반영"
                   : status === "COMPLETED"
-                    ? "e-waste 공장 전달 완료"
+                    ? "e-waste 공장 전달 완료 반영"
                     : "실시간 위치 공유"}
               </p>
             </div>
