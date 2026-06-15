@@ -237,6 +237,7 @@ export default function CrewActiveCallPage() {
     ? { lat: call.tracking.processingCenter.lat, lng: call.tracking.processingCenter.lng }
     : null;
 
+  const routeTarget = status === "ARRIVED" || status === "COMPLETED" ? hubLocation ?? pickupLocation : pickupLocation;
   const mapCenter = crewLocation ?? pickupLocation ?? hubLocation ?? { lat: 37.5665, lng: 126.978 };
   const mapMarkers = [
     ...(pickupLocation ? [{ key: "pickup", label: "P", position: pickupLocation, variant: "pickup" as const }] : []),
